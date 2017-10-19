@@ -1,4 +1,7 @@
-def download_file(url, target, session=None):
+import aiohttp
+import aiofiles
+
+async def download_file(url, target, session=None):
     if session is None:
         session = requests.Session()
     with session.get(url, stream=True) as response:
