@@ -1,10 +1,49 @@
+import asyncio
 import os.path
-import shutil
 import fnmatch
-from concurrent.futures import ThreadPoolExecutor, wait, as_completed
+import urlparse
+
+import aiohttp
+import aiofiles
+import async_generator
 
 
-def recursive_download(base_url, directory=".", username=None, password=None, include=None, exclude=None, download_jobs=None, **kwargs):
+@async_generator
+async def recursive_stream(base_url, session=None, include=None, exclude=None,
+                           max_connections=100, **kwargs):
+    """Stream file contents"""
+    try:
+        from itsybitsy.async import crawl_async
+    except ImportError:
+        raise ImportError("itsybitsy must be installed for recursive downloading")
+
+    limiter = asyncio.Semaphore(max_connections)
+
+    if isinstance(include, str):
+        include = [include]
+    if isinstance(exclude, str):
+        exclude = [exclude]
+
+    if session is None:
+        connector = aiohttp.TCPConnector(limit=None)
+        session = aiohttp.Session()
+        close_session = True
+    else:
+        close_session = False
+
+    try:
+        async for link in crawl_async(base_url, **kwargs):
+
+            async with limiter:
+
+
+    finally:
+        if close_session:
+            session.close()
+
+
+def recursive_download(base_url, directory=".", username=None, password=None,
+                       include=None, exclude=None, download_jobs=None, **kwargs):
     """
     """
     if kwargs.get("session") is None:
@@ -15,32 +54,7 @@ def recursive_download(base_url, directory=".", username=None, password=None, in
     else:
         session = kwargs["session"]
 
-    crawler = crawl_page(base_url, **kwargs)
-    base_url_normalized = next(crawler)
-    base_path = urlparse.urlparse(base_url_normalized).path
+    loop = asyncio.get_event_loop()
+    coro = recursive_stream(...)
 
-    if isinstance(include, str):
-        include = [include]
-    if isinstance(exclude, str):
-        exclude = [exclude]
-
-    futures = []
-    with ThreadPoolExecutor(max_workers=download_jobs) as executor:
-        for url in crawler:
-            url_parts = urlparse.urlparse(url)
-            file_path = url_parts.path
-            assert file_path.startswith(base_path)
-            target_filename = os.path.join(directory, os.path.normpath(file_path[len(base_path):]))
-
-            if include and not any(fnmatch.fnmatch(target_filename, pattern) for pattern in include):
-                continue
-            if exclude and any(fnmatch.fnmatch(target_filename, pattern) for pattern in exclude):
-                continue
-
-            try:
-                os.makedirs(os.path.dirname(target_filename))
-            except OSError:
-                pass
-
-            futures.append(executor.submit(download_file, url, target_filename, session=session))
-        wait(futures)
+    for loop_over_async(coro, loop):
