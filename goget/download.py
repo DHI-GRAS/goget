@@ -12,3 +12,13 @@ async def download_file(url, target, session=None):
             local_filename=target,
             local_filesize=os.path.getsize(target)))
     return target
+
+
+async def download_from_response(response, filepath):
+    async with aiofiles.open(filepath, 'wb') as f:
+        while True:
+            chunk = await response.content.read(1024)
+            if not chunk:
+                break
+            await f.write(chunk)
+    return await response.release()
